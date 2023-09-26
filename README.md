@@ -48,12 +48,15 @@ Please kindly star :star: this project if it helps you. We take great efforts to
 
 This project has been tested on Ubuntu 16.04(ROS Kinetic) and 18.04(ROS Melodic). Take Ubuntu 18.04 as an example, run the following commands to install required tools:
 
+```bash
+sudo apt-get install libarmadillo-dev libelf-dev libdw-dev 
 ```
-  sudo apt-get install libarmadillo-dev ros-melodic-nlopt libelf-dev libdw-dev 
-```
+
+Install NLopt refer to [Unexpected crash](#unexpected-crash), but no need to modify any CMakelists.txt files.
+
 After that, you need to install __LKH-3__(LKH-3.0.6 version is recommended) with the following commands. Please make sure the executable file `LKH` is correctly placed at `/usr/local/bin`.
 
-```
+```bash
 wget http://akira.ruc.dk/~keld/research/LKH-3/LKH-3.0.6.tgz
 tar xvfz LKH-3.0.6.tgz
 cd LKH-3.0.6
@@ -72,21 +75,21 @@ After successful installation, in the **local_sensing** package in **uav_simulat
 
 Then simply clone and compile our package (using ssh here):
 
-```
-  cd ${YOUR_WORKSPACE_PATH}/src
-  git clone https://github.com/SYSU-STAR/RACER.git
-  cd ../ 
-  catkin_make
+```bash
+cd ${YOUR_WORKSPACE_PATH}/src
+git clone https://github.com/SYSU-STAR/RACER.git
+cd ../ 
+catkin_make
 ```
 
 After compilation you can start a sample swarm exploration demo. Firstly run ```Rviz``` for visualization: 
 
-```
-  source devel/setup.bash && roslaunch exploration_manager rviz.launch
+```bash
+source devel/setup.bash && roslaunch exploration_manager rviz.launch
 ```
 then run the simulation (run in a new terminals): 
-```
-  source devel/setup.bash && roslaunch exploration_manager swarm_exploration.launch
+```bash
+source devel/setup.bash && roslaunch exploration_manager swarm_exploration.launch
 ```
 
 By default you can see a pillar-like environment. Trigger the quadrotor to start exploration by the ```2D Nav Goal``` tool in ```Rviz```. A sample is shown below, where unexplored structures are shown in grey and explored ones are shown in colorful voxels. The FoV and trajectories of the quadrotor are also displayed.
@@ -153,20 +156,19 @@ Lastly, you can use this file for exploration, as mentioned [here](#exploring-di
 
 When running this project on Ubuntu 20.04, C++14 is required. Please add the following line in all CMakelists.txt files:
 
-```
+```bash
 set(CMAKE_CXX_STANDARD 14)
 ```
 If you get the following error message,  please try to recompile this project with **catkin_make** .
-```
+```bash
 fatal error: plan_env/ChunkStamps.h: No such file or directory
 ```
 ### Unexpected crash
 
 If the ```exploration_node``` dies after triggering a 2D Nav Goal, it is possibly caused by the ros-nlopt library. In this case, we recommend to uninstall it and [install nlopt following the official document](https://nlopt.readthedocs.io/en/latest/NLopt_Installation/). Then in the [CMakeLists.txt of bspline_opt package](swarm_exploration/bspline_opt/CMakeLists.txt), change the associated lines to link the nlopt library:
 
-```
+```bash
 find_package(NLopt REQUIRED)
-set(NLopt_INCLUDE_DIRS ${NLOPT_INCLUDE_DIR})
 
 ...
 
