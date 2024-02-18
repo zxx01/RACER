@@ -61,6 +61,7 @@ add_library( plan_env
     src/map_ros.cpp
     src/multi_map_manager.cpp
     )
+add_dependencies(plan_env ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
 target_link_libraries( plan_env
     ${catkin_LIBRARIES} 
     ${PCL_LIBRARIES}
