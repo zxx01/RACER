@@ -43,8 +43,9 @@ void FastExplorationFSM::init(ros::NodeHandle& nh) {
   planner_manager_ = expl_manager_->planner_manager_;
   state_ = EXPL_STATE::INIT;
   fd_->have_odom_ = false;
-  fd_->state_str_ = { "INIT", "WAIT_TRIGGER", "PLAN_TRAJ", "PUB_TRAJ", "EXEC_TRAJ", "FINISH", "IDL"
-                                                                                              "E" };
+  fd_->state_str_ = { "INIT", "WAIT_TRIGGER", "PLAN_TRAJ", "PUB_TRAJ", "EXEC_TRAJ", "FINISH",
+    "IDL"
+    "E" };
   fd_->static_state_ = true;
   fd_->trigger_ = false;
   fd_->avoid_collision_ = false;
@@ -813,7 +814,7 @@ void FastExplorationFSM::optTimerCallback(const ros::TimerEvent& e) {
             << std::endl;
   if (cur_app1 + cur_app2 > prev_app1 + prev_app2 + 0.1) {
     ROS_ERROR("Larger cost after reallocation");
-    if (state_!=WAIT_TRIGGER) {
+    if (state_ != WAIT_TRIGGER) {
       return;
     }
   }

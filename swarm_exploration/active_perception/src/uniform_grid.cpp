@@ -7,6 +7,13 @@
 
 namespace fast_planner {
 
+/**
+ * @brief Construct a new Uniform Grid:: Uniform Grid object
+ *
+ * @param edt
+ * @param nh
+ * @param level
+ */
 UniformGrid::UniformGrid(
     const shared_ptr<EDTEnvironment>& edt, ros::NodeHandle& nh, const int& level) {
 
@@ -34,7 +41,9 @@ UniformGrid::UniformGrid(
   for (int i = 0; i < 2; ++i) {
     int num = ceil(size[i] / grid_size);
     resolution_[i] = size[i] / double(num);
-    for (int j = 1; j < level; ++j) resolution_[i] *= 0.5;
+    for (int j = 1; j < level; ++j) {
+      resolution_[i] *= 0.5;
+    }
   }
   resolution_[2] = size[2];
   initialized_ = false;
@@ -47,9 +56,15 @@ UniformGrid::UniformGrid(
 UniformGrid::~UniformGrid() {
 }
 
+/**
+ * @brief 初始化每个Grid里面的数据
+ *
+ */
 void UniformGrid::initGridData() {
   Eigen::Vector3d size = max_ - min_;
-  for (int i = 0; i < 3; ++i) grid_num_(i) = ceil(size(i) / resolution_[i]);
+  for (int i = 0; i < 3; ++i) {
+    grid_num_(i) = ceil(size(i) / resolution_[i]);
+  }
   grid_data_.resize(grid_num_[0] * grid_num_[1] * grid_num_[2]);
 
   std::cout << "data size: " << grid_data_.size() << std::endl;
@@ -85,7 +100,13 @@ void UniformGrid::initGridData() {
   }
 }
 
+/**
+ * @brief
+ * 更新网格数据结构中每个格子的基础坐标信息，包括计算格子的顶点坐标、顶点的最小和最大值（用于形成一个边界框），以及边界线的法向量。
+ *
+ */
 void UniformGrid::updateBaseCoor() {
+
   for (int i = 0; i < grid_data_.size(); ++i) {
     auto& grid = grid_data_[i];
     // if (!grid.active_) continue;
@@ -139,18 +160,30 @@ void UniformGrid::updateBaseCoor() {
   }
 }
 
+/**
+ * @brief
+ *
+ * @param drone_id 当前无人机的标识符
+ * @param grid_ids 与当前无人机相关联的网格ID列表
+ * @param parti_ids 应该被当前无人机划分的网格ID列表
+ * @param parti_ids_all 所有需要被划分的网格ID列表
+ */
 void UniformGrid::updateGridData(const int& drone_id, vector<int>& grid_ids, vector<int>& parti_ids,
     vector<int>& parti_ids_all) {
 
   // parti_ids are ids of grids that are assigned to THIS drone and should be divided
   // parti_ids_all are ids of ALL grids that should be divided
 
+  // 初始化所有网格的更新状态为未更新(is_updated_ = false)
   for (auto& grid : grid_data_) {
     grid.is_updated_ = false;
   }
   parti_ids.clear();
 
+  // 根据level_的值决定是否重置更新区域
   bool reset = (level_ == 2);
+
+  // 获取需要更新的网格区域的最小和最大坐标
   Vector3d update_min, update_max;
   edt_->sdf_map_->getUpdatedBox(update_min, update_max, reset);
 
@@ -160,8 +193,8 @@ void UniformGrid::updateGridData(const int& drone_id, vector<int>& grid_ids, vec
   // Rediscovered grid
   vector<int> rediscovered_ids;
 
-  auto have_overlap = [](
-      const Vector3d& min1, const Vector3d& max1, const Vector3d& min2, const Vector3d& max2) {
+  auto have_overlap = [](const Vector3d& min1, const Vector3d& max1, const Vector3d& min2,
+                          const Vector3d& max2) {
     for (int m = 0; m < 2; ++m) {
       double bmin = max(min1[m], min2[m]);
       double bmax = min(max1[m], max2[m]);
@@ -353,6 +386,12 @@ bool UniformGrid::insideGrid(const Eigen::Vector3i& id) {
   return true;
 }
 
+/**
+ * @brief
+ * 将一组frontiers的坐标输入到均匀网格系统中，并更新网格单元以反映这些frontiers的位置，更新每一个grid都包含哪一些frontiers
+ *
+ * @param avgs
+ */
 void UniformGrid::inputFrontiers(const vector<Eigen::Vector3d>& avgs) {
   for (auto& grid : grid_data_) {
     grid.contained_frontier_ids_.clear();

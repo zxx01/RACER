@@ -130,6 +130,7 @@ int FastExplorationManager::planExploreMotion(
   ed_->frontier_tour_.clear();
   Vector3d next_pos;
   double next_yaw;
+
   // Find the tour passing through viewpoints
   // Optimal tour is returned as indices of frontier
   vector<int> grid_ids, frontier_ids;
@@ -513,8 +514,9 @@ void FastExplorationManager::findGlobalTour(const Vector3d& cur_pos, const Vecto
   par_file << "PROBLEM_FILE = " << ep_->tsp_dir_ + "/drone_" + to_string(ep_->drone_id_) + ".tsp\n";
   par_file << "GAIN23 = NO\n";
   par_file << "OUTPUT_TOUR_FILE ="
-           << ep_->tsp_dir_ + "/drone_" + to_string(ep_->drone_id_) + ".tou"
-                                                                      "r\n";
+           << ep_->tsp_dir_ + "/drone_" + to_string(ep_->drone_id_) +
+                  ".tou"
+                  "r\n";
   par_file << "RUNS = 1\n";
   par_file.close();
 

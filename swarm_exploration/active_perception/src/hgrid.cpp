@@ -7,6 +7,12 @@
 
 namespace fast_planner {
 
+/**
+ * @brief Construct a new HGrid::HGrid object
+ *
+ * @param edt
+ * @param nh
+ */
 HGrid::HGrid(const shared_ptr<EDTEnvironment>& edt, ros::NodeHandle& nh) {
 
   this->edt_ = edt;
@@ -18,6 +24,7 @@ HGrid::HGrid(const shared_ptr<EDTEnvironment>& edt, ros::NodeHandle& nh) {
   path_finder_.reset(new Astar);
   path_finder_->init(nh, edt);
 
+  // 两层的grid，每一层都是等分辨率的grid，下一层的分辨率是上一层的1/2
   grid1_.reset(new UniformGrid(edt, nh, 1));
   grid2_.reset(new UniformGrid(edt, nh, 2));
 
@@ -43,6 +50,12 @@ HGrid::HGrid(const shared_ptr<EDTEnvironment>& edt, ros::NodeHandle& nh) {
 HGrid::~HGrid() {
 }
 
+/**
+ * @brief 更新网格数据结构中每个格子的基础坐标信息
+ *
+ * @return true
+ * @return false
+ */
 bool HGrid::updateBaseCoor() {
 
   // Eigen::Vector4d tf;
@@ -62,12 +75,27 @@ bool HGrid::updateBaseCoor() {
   return true;
 }
 
+/**
+ * @brief 将现有的frontiers分配到grids中
+ *
+ * @param avgs
+ */
 void HGrid::inputFrontiers(const vector<Eigen::Vector3d>& avgs) {
   // Input frontier to both levels
   grid1_->inputFrontiers(avgs);
   grid2_->inputFrontiers(avgs);
 }
 
+/**
+ * @brief
+ *
+ * @param drone_id
+ * @param grid_ids
+ * @param reallocated
+ * @param last_grid_ids
+ * @param first_ids
+ * @param second_ids
+ */
 void HGrid::updateGridData(const int& drone_id, vector<int>& grid_ids, bool reallocated,
     const vector<int>& last_grid_ids, vector<int>& first_ids, vector<int>& second_ids) {
 

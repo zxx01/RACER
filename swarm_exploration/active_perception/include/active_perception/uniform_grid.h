@@ -27,6 +27,10 @@ class HGrid;
 
 // struct GridInfo {};
 
+/**
+ * @brief 每个Grid元素所包含的内容
+ *
+ */
 class GridInfo {
 public:
   GridInfo() {
@@ -46,8 +50,8 @@ public:
   bool is_cur_relevant_;
 
   // Vertices and their box in xy plane, in current drone's frame
-  Eigen::Vector3d vmin_, vmax_;
-  vector<Eigen::Vector3d> vertices_;
+  Eigen::Vector3d vmin_, vmax_;       // grid 的坐标最大值和最小值
+  vector<Eigen::Vector3d> vertices_;  // grid 的四个 vertices: 左下、右下、右上、左上
 
   // Normals of separating lines in xy plane, associated with vertices_
   vector<Eigen::Vector3d> normals_;
