@@ -161,12 +161,12 @@ void UniformGrid::updateBaseCoor() {
 }
 
 /**
- * @brief
+ * @brief 更新网格数据，特别是在与无人机相关的网格上执行细分和相关性更新的逻辑。
  *
  * @param drone_id 当前无人机的标识符
- * @param grid_ids 与当前无人机相关联的网格ID列表
- * @param parti_ids 应该被当前无人机划分的网格ID列表
- * @param parti_ids_all 所有需要被划分的网格ID列表
+ * @param grid_ids 与当前无人机相关联的网格ID列表（更新后的grid_ids，新的relevant的grids）
+ * @param parti_ids 应该被当前无人机划分的网格ID列表(relevant需要为true)
+ * @param parti_ids_all 所有需要被划分的网格ID列表(不管relevant的值)
  */
 void UniformGrid::updateGridData(const int& drone_id, vector<int>& grid_ids, vector<int>& parti_ids,
     vector<int>& parti_ids_all) {
@@ -174,7 +174,7 @@ void UniformGrid::updateGridData(const int& drone_id, vector<int>& grid_ids, vec
   // parti_ids are ids of grids that are assigned to THIS drone and should be divided
   // parti_ids_all are ids of ALL grids that should be divided
 
-  // 初始化所有网格的更新状态为未更新(is_updated_ = false)
+  // 初始化grid_data_的所有grid_的更新状态为未更新(is_updated_ = false)
   for (auto& grid : grid_data_) {
     grid.is_updated_ = false;
   }
@@ -183,7 +183,7 @@ void UniformGrid::updateGridData(const int& drone_id, vector<int>& grid_ids, vec
   // 根据level_的值决定是否重置更新区域
   bool reset = (level_ == 2);
 
-  // 获取需要更新的网格区域的最小和最大坐标
+  // 获取需要更新的网格区域的最小和最大坐标（本机的和其他机器的）
   Vector3d update_min, update_max;
   edt_->sdf_map_->getUpdatedBox(update_min, update_max, reset);
 
@@ -204,6 +204,7 @@ void UniformGrid::updateGridData(const int& drone_id, vector<int>& grid_ids, vec
   };
 
   // For each grid, check overlap with updated box and update it if necessary
+  // 遍历所有网格，检查与更新区域的重叠情况，并根据需要更新网格信息
   for (int i = 0; i < grid_data_.size(); ++i) {
     auto& grid = grid_data_[i];
     if (!grid.active_) continue;
@@ -238,6 +239,7 @@ void UniformGrid::updateGridData(const int& drone_id, vector<int>& grid_ids, vec
   }
 
   // Patch code. To avoid incomplete update of level 2 grids...
+  // 更新新增的level==2的grid的信息
   for (auto id : extra_ids_) {
     if (grid_data_[id].is_updated_) continue;
 
@@ -257,7 +259,7 @@ void UniformGrid::updateGridData(const int& drone_id, vector<int>& grid_ids, vec
     }
   }
 
-  // Update the dominance grid of ego drone
+  // Update the dominance grid of ego drone 丢弃grid_ids中那些不再relevant的，并添加rediscovered的
   if (!initialized_) {
     if (drone_id == 1 && level_ == 1) grid_ids = relevant_id_;
     // else
@@ -287,9 +289,17 @@ void UniformGrid::updateGridData(const int& drone_id, vector<int>& grid_ids, vec
   }
 }
 
+/**
+ * @brief
+ * 新给定id的网格单元信息，包括其是否为当前相关的网格、其内部的已知和未知体素数量，以及是否需要被进一步细分。
+ *
+ * @param id
+ */
 void UniformGrid::updateGridInfo(const Eigen::Vector3i& id) {
   int adr = toAddress(id);
   auto& grid = grid_data_[adr];
+
+  // 避免重复更新
   if (grid.is_updated_) {  // Ensure only one update to avoid repeated computation
     return;
   }
@@ -310,7 +320,7 @@ void UniformGrid::updateGridInfo(const Eigen::Vector3i& id) {
     return true;
   };
 
-  // Count known
+  // Count known 体素占用状态计算，统计free的voxel数量和unknown的voxel数量，并计算unknown的区域中心
   const double res = edt_->sdf_map_->getResolution();
   grid.center_.setZero();
   grid.unknown_num_ = 0;
@@ -333,12 +343,14 @@ void UniformGrid::updateGridInfo(const Eigen::Vector3i& id) {
     }
   }
 
+  // 网格单元相关性判断：是否值得继续被探索
   grid.is_cur_relevant_ = isRelevant(grid);
 
   // cout << "level: " << level_ << ", grid id: " << id.transpose() << ", adr: " << adr
   //      << ", unknown: " << grid.unknown_num_ << ", center: " << grid.center_.transpose()
   //      << ", rele: " << grid.is_cur_relevant_ << endl;
 
+  // 判断是否需要被细分
   if (level_ == 1 && grid.active_ && free > min_free_) {
     grid.need_divide_ = true;
   }
@@ -369,6 +381,11 @@ void UniformGrid::indexToPos(const Eigen::Vector3i& id, const double& inc, Eigen
   for (int i = 0; i < 3; ++i) pos(i) = (id(i) + inc) * resolution_[i] + min_(i);
 }
 
+/**
+ * @brief 激活指定的网格序列地址对应的网格
+ *
+ * @param ids
+ */
 void UniformGrid::activateGrids(const vector<int>& ids) {
   for (auto id : ids) {
     grid_data_[id].active_ = true;
@@ -412,6 +429,14 @@ void UniformGrid::inputFrontiers(const vector<Eigen::Vector3d>& avgs) {
   }
 }
 
+/**
+ * @brief
+ * 判断给定的网格单元（GridInfo对象）是否为“相关”的，即根据特定的条件判断该网格单元是否包含足够的unknown区域或frontier区域，从而对当前的探索或导航任务有意义。
+ *
+ * @param grid
+ * @return true
+ * @return false
+ */
 bool UniformGrid::isRelevant(const GridInfo& grid) {
   // return grid.unknown_num_ >= min_unknown_ || grid.frontier_num_ >= min_frontier_;
   // return grid.unknown_num_ >= min_unknown_ || !grid.frontier_cell_nums_.empty();

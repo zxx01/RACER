@@ -47,7 +47,9 @@ void MultiMapManager::init() {
   chunk_buffer_.resize(map_num_);
   buffer_map_.resize(map_num_);
   last_chunk_stamp_time_.resize(map_num_);
-  for (auto time : last_chunk_stamp_time_) time = 0.0;
+  for (auto time : last_chunk_stamp_time_) {
+    time = 0.0;
+  }
 
   // // Test the idx list operation
 
@@ -91,6 +93,12 @@ void MultiMapManager::init() {
   // }
 }
 
+/**
+ * @brief
+ * 更新多无人机系统中的地图块数据：处理体素地址的缓冲区，当缓冲区积累到一定数量的体素地址时，它会创建新的地图块，并将这些地址分配给该地图块
+ *
+ * @param adrs
+ */
 void MultiMapManager::updateMapChunk(const vector<uint32_t>& adrs) {
   adr_buffer_.insert(adr_buffer_.end(), adrs.begin(), adrs.end());
 
@@ -125,12 +133,18 @@ void MultiMapManager::updateMapChunk(const vector<uint32_t>& adrs) {
   }
 }
 
+/**
+ * @brief 在多无人机系统中用于定期发送每个无人机管理的地图块（chunks）的时间戳信息给其他无人机。
+ *
+ * @param e
+ */
 void MultiMapManager::stampTimerCallback(const ros::TimerEvent& e) {
   // Send stamp of chunks to other drones
   plan_env::ChunkStamps msg;
   msg.from_drone_id = drone_id_;
   msg.time = ros::Time::now().toSec();
 
+  // 广播本机持有的各个chunks的map记录
   for (auto chunks : multi_map_chunks_) {
     plan_env::IdxList idx_list;
     idx_list.ids = chunks.idx_list_;
@@ -187,40 +201,65 @@ void MultiMapManager::stampTimerCallback(const ros::TimerEvent& e) {
   }
 }
 
+/**
+ * @brief 处理接收到的地图块时间戳信息
+ *
+ * @param msg
+ */
 void MultiMapManager::stampMsgCallback(const plan_env::ChunkStampsConstPtr& msg) {
+  // 过滤自发消息
   if (msg->from_drone_id == drone_id_) return;
+  // 过滤地面节点消息
   if (drone_id_ == map_num_) return;  // Ground node does not send chunk
 
   // auto t1 = ros::Time::now();
 
-  // Check msg time to avoid overwhelming
+  // Check msg time to avoid overwhelming 防止过于频繁的消息处理造成的系统负载过高
   if (msg->time - last_chunk_stamp_time_[msg->from_drone_id - 1] < 0.3) return;
   last_chunk_stamp_time_[msg->from_drone_id - 1] = msg->time;
 
   // Check others' stamp info and send chunks unknown by them
+  // 查找和发送本机记录的而来源无人机没有记录的地图块
   for (int i = 0; i < multi_map_chunks_.size(); ++i) {
-    if (i == msg->from_drone_id - 1) continue;
+    if (i == msg->from_drone_id - 1) {
+      continue;
+    }
+    // 确定当前无人机缺少哪些由消息来源无人机管理的地图块
     vector<int> missed;
     findMissedChunkIds(multi_map_chunks_[i].idx_list_, msg->idx_lists[i].ids, missed);
+    // 发送这些缺失的地图块给消息来源无人机
     sendChunks(i + 1, msg->from_drone_id, missed);
   }
 
   // ROS_ERROR("Stamp time: %lf", (ros::Time::now() - t1).toSec());
 }
 
+/**
+ * @brief
+ * 计算并识别当前无人机（self）拥有的地图块ID中，哪些是另一无人机（other）没有的，即找出缺失的地图块ID
+ *
+ * @param self_idx_list
+ * @param other_idx_list
+ * @param miss_ids
+ */
 void MultiMapManager::findMissedChunkIds(
     const vector<int>& self_idx_list, const vector<int>& other_idx_list, vector<int>& miss_ids) {
-  // Compute the complement set of other idx
+
+  // Compute the complement set of other idx 补集计算
+  // 空列表特殊处理：如果other_idx_list为空，意味着另一无人机没有任何地图块信息，
+  // 因此当前无人机的所有地图块ID都被认为是缺失的，直接将self_idx_list赋值给miss_ids并返回
   if (other_idx_list.empty()) {
     miss_ids = self_idx_list;
     return;
   }
 
+  // 计算other_idx_list缺失的地图块ID
   vector<int> not_in_other;
   if (other_idx_list[0] > 1) {
     not_in_other.push_back(1);
     not_in_other.push_back(other_idx_list[0] - 1);
   }
+
   for (int i = 1; i < other_idx_list.size(); i += 2) {
     not_in_other.push_back(other_idx_list[i] + 1);
     if (i == other_idx_list.size() - 1) {
@@ -232,6 +271,7 @@ void MultiMapManager::findMissedChunkIds(
   }
 
   // Compute the intersection of self and not_in_other (brute-force, O(n^2))
+  // 找出当前无人机拥有但另一无人机没有的地图块ID范围
   for (int i = 0; i < self_idx_list.size(); i += 2) {
     for (int j = 0; j < not_in_other.size(); j += 2) {
       int minr, maxr;
@@ -244,6 +284,18 @@ void MultiMapManager::findMissedChunkIds(
   }
 }
 
+/**
+ * @brief 判断两个范围是否存在交集
+ *
+ * @param min1
+ * @param max1
+ * @param min2
+ * @param max2
+ * @param minr
+ * @param maxr
+ * @return true
+ * @return false
+ */
 bool MultiMapManager::findIntersect(
     const int& min1, const int& max1, const int& min2, const int max2, int& minr, int& maxr) {
   minr = max(min1, min2);
@@ -252,6 +304,13 @@ bool MultiMapManager::findIntersect(
   return false;
 }
 
+/**
+ * @brief 发送一系列指定的地图块（chunks）数据给特定的无人机
+ *
+ * @param chunk_drone_id
+ * @param to_drone_id
+ * @param idx_list
+ */
 void MultiMapManager::sendChunks(
     const int& chunk_drone_id, const int& to_drone_id, const vector<int>& idx_list) {
   auto& data = multi_map_chunks_[chunk_drone_id - 1];
@@ -281,11 +340,14 @@ void MultiMapManager::sendChunks(
       //           << int(msg.chunk_drone_id) << " to drone " << int(msg.to_drone_id) << std::endl;
     }
   }
-
-  // for (int i = idx; i < data.chunks_.size(); ++i) {
-  // }
 }
 
+/**
+ * @brief 查询一系列地图块中每个体素的占用状态。
+ *
+ * @param adrs
+ * @param occs
+ */
 void MultiMapManager::getOccOfChunk(const vector<uint32_t>& adrs, vector<uint8_t>& occs) {
   for (auto adr : adrs) {
     uint8_t occ = map_->md_->occupancy_buffer_[adr] > map_->mp_->min_occupancy_log_ ? 1 : 0;
@@ -293,6 +355,12 @@ void MultiMapManager::getOccOfChunk(const vector<uint32_t>& adrs, vector<uint8_t
   }
 }
 
+/**
+ * @brief
+ * 处理来自其他无人机发送的地图块（chunks）数据时使用的回调函数。它的主要职责是接收这些数据并将其存储在缓冲区中，以便后续处理。
+ *
+ * @param msg
+ */
 void MultiMapManager::chunkCallback(const plan_env::ChunkDataConstPtr& msg) {
   // Receive chunks from other drones, store them in chunk buffer
   if (msg->from_drone_id == drone_id_) return;
@@ -311,6 +379,11 @@ void MultiMapManager::chunkCallback(const plan_env::ChunkDataConstPtr& msg) {
   return;
 }
 
+/**
+ * @brief
+ *
+ * @param e
+ */
 void MultiMapManager::chunkTimerCallback(const ros::TimerEvent& e) {
 
   // Not process chunk until swarm basecoor transform is available

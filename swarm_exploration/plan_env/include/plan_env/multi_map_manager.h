@@ -13,8 +13,8 @@
 #include <unordered_map>
 
 using std::shared_ptr;
-using std::vector;
 using std::unordered_map;
+using std::vector;
 
 namespace fast_planner {
 class SDFMap;

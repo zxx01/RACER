@@ -88,9 +88,11 @@ void HGrid::inputFrontiers(const vector<Eigen::Vector3d>& avgs) {
 
 /**
  * @brief
+ * 更新多层次网格数据，特别是在处理由无人机覆盖的网格区域时，对这些网格进行管理和细分。
+ * 该函数涵盖了从网格ID的转换、网格数据的更新，到保持网格访问一致性的多个步骤。
  *
  * @param drone_id
- * @param grid_ids
+ * @param grid_ids 更新后的所有relevant的grids
  * @param reallocated
  * @param last_grid_ids
  * @param first_ids
@@ -100,6 +102,7 @@ void HGrid::updateGridData(const int& drone_id, vector<int>& grid_ids, bool real
     const vector<int>& last_grid_ids, vector<int>& first_ids, vector<int>& second_ids) {
 
   // Convert grid_ids to the ids of bi-level uniform grid
+  // 网格ID转换：将输入的网格ID列表(grid_ids)分为两个列表：一级网格ID(grid_ids1)和二级网格ID(grid_ids2)
   vector<int> grid_ids1, grid_ids2;
   const int grid_num1 = grid1_->grid_data_.size();
   for (auto id : grid_ids) {
@@ -124,7 +127,7 @@ void HGrid::updateGridData(const int& drone_id, vector<int>& grid_ids, bool real
   //   std::cout << id << ", ";
   // std::cout << "" << std::endl;
 
-  // Update at level 1
+  // Update at level 1 一级网格更新
   vector<int> tmp_ids1 = grid_ids1;
   vector<int> parti_ids1, parti_ids1_all;
   grid1_->updateGridData(drone_id, grid_ids1, parti_ids1, parti_ids1_all);
@@ -139,8 +142,8 @@ void HGrid::updateGridData(const int& drone_id, vector<int>& grid_ids, bool real
   //   std::cout << id << ", ";
   // std::cout << "" << std::endl;
 
-  // Merge the newly partitioned and original grid ids
-  vector<int> fine_ids;
+  // Merge the newly partitioned and original grid ids 细分网格处理
+  vector<int> fine_ids;  // 新分割的且状态为relevant的grids
   for (auto id : parti_ids1) {
     vector<int> tmp_ids;
     coarseToFineId(id, tmp_ids);
@@ -148,8 +151,8 @@ void HGrid::updateGridData(const int& drone_id, vector<int>& grid_ids, bool real
   }
   grid_ids2.insert(grid_ids2.end(), fine_ids.begin(), fine_ids.end());
 
-  // Activate newly divided grids
-  vector<int> fine_ids_all;
+  // Activate newly divided grids 激活新分割的网格
+  vector<int> fine_ids_all;  // 新分割的所有grids
   for (auto id : parti_ids1_all) {
     vector<int> tmp_ids;
     coarseToFineId(id, tmp_ids);
@@ -164,6 +167,7 @@ void HGrid::updateGridData(const int& drone_id, vector<int>& grid_ids, bool real
   //   std::cout << id << ", ";
   // std::cout << "" << std::endl;
 
+  // 二级网格更新
   vector<int> parti_ids2, parti_ids2_all;  // Should be empty, no partition at level 2
   grid2_->updateGridData(drone_id, grid_ids2, parti_ids2, parti_ids2_all);
 
@@ -172,6 +176,7 @@ void HGrid::updateGridData(const int& drone_id, vector<int>& grid_ids, bool real
   //   std::cout << id << ", ";
   // std::cout << "" << std::endl;
 
+  // 将 grid_ids1 和 grid_ids2 的所有relevant的grid保存到同一个grid_ids中
   grid_ids = grid_ids1;
   for (auto& id : grid_ids2) {
     grid_ids.push_back(id + grid_num1);
@@ -182,6 +187,14 @@ void HGrid::updateGridData(const int& drone_id, vector<int>& grid_ids, bool real
   getConsistentGrid(last_grid_ids, grid_ids, first_ids, second_ids);
 }
 
+/**
+ * @brief
+ *
+ * @param last_ids
+ * @param cur_ids
+ * @param first_ids
+ * @param second_ids
+ */
 void HGrid::getConsistentGrid(const vector<int>& last_ids, const vector<int>& cur_ids,
     vector<int>& first_ids, vector<int>& second_ids) {
 
@@ -192,15 +205,16 @@ void HGrid::getConsistentGrid(const vector<int>& last_ids, const vector<int>& cu
   // std::cout << "" << std::endl;
 
   // Find the first two level 1 grids in last sequence
+  // 首先，从last_ids中找到第一个一级网格的ID（grid_id1）。如果这个ID超过了一级网格的数量（grid_num1），则它表示的是一个细网格，需要转换为对应的粗网格ID。
   const int grid_num1 = grid1_->grid_data_.size();
   int grid_id1 = last_ids[0];
   if (grid_id1 >= grid_num1) {
     int tmp = grid_id1 - grid_num1;
     fineToCoarseId(tmp, grid_id1);
   }
-
   // std::cout << "level 1 grid 1: " << grid_id1 << std::endl;
 
+  // 然后，遍历last_ids以找到与grid_id1不同的第二个一级网格的ID（grid_id2）。如果找到的是细网格ID，也转换为对应的粗网格ID。
   int grid_id2 = -1;
   for (int i = 1; i < last_ids.size(); ++i) {
     if (last_ids[i] < grid_num1) {
@@ -218,6 +232,8 @@ void HGrid::getConsistentGrid(const vector<int>& last_ids, const vector<int>& cu
   }
   // std::cout << "level 1 grid 2: " << grid_id2 << std::endl;
 
+  // 在当前序列中找到对应的网格单元
+  // 遍历cur_ids，首先尝试找到与grid_id1相匹配的ID
   first_ids.clear();
   // In the current sequence, try to find the first level 1 grid...
   for (auto id : cur_ids) {
@@ -239,6 +255,8 @@ void HGrid::getConsistentGrid(const vector<int>& last_ids, const vector<int>& cu
     }
   }
 
+  // 如果first_ids非空，说明已经找到第一个网格单元，接下来尝试在cur_ids中找到与grid_id2相匹配的网格单元，将其添加到second_ids中
+  // 如果first_ids仍然为空，继续在cur_ids中寻找与grid_id1相匹配的网格单元。
   vector<int>* ids_ptr;
   if (!first_ids.empty()) {
     // Already find the first, should find the second
@@ -271,6 +289,13 @@ void HGrid::getConsistentGrid(const vector<int>& last_ids, const vector<int>& cu
   return;
 }
 
+/**
+ * @brief
+ * 粗糙网格的索引转换为细网格的索引集合。这个过程是在多层次网格（例如，用于不同精度的地图表示）管理中常见的操作，特别是在需要从较粗糙的网格层级向更细的网格层级转换时。
+ *
+ * @param coarse 粗粒度网格地址
+ * @param fines 细粒度网格索引
+ */
 void HGrid::coarseToFineId(const int& coarse, vector<int>& fines) {
   // 0: 0, 1
   // 1: 2, 3
@@ -290,6 +315,12 @@ void HGrid::coarseToFineId(const int& coarse, vector<int>& fines) {
   }
 }
 
+/**
+ * @brief 从细网格索引到粗糙网格的存储地址转换
+ *
+ * @param fine
+ * @param coarse
+ */
 void HGrid::fineToCoarseId(const int& fine, int& coarse) {
   Eigen::Vector3i fidx;
   grid2_->adrToIndex(fine, fidx);
@@ -302,6 +333,16 @@ void HGrid::fineToCoarseId(const int& fine, int& coarse) {
   coarse = grid1_->toAddress(cidx);
 }
 
+/**
+ * @brief TODO~~
+ *
+ * @param positions
+ * @param velocities
+ * @param first_ids
+ * @param second_ids
+ * @param grid_ids
+ * @param mat
+ */
 void HGrid::getCostMatrix(const vector<Eigen::Vector3d>& positions,
     const vector<Eigen::Vector3d>& velocities, const vector<vector<int>>& first_ids,
     const vector<vector<int>>& second_ids, const vector<int>& grid_ids, Eigen::MatrixXd& mat) {
